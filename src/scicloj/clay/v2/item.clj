@@ -171,6 +171,12 @@
       (or {:height "400px"
            :width "100%"})))
 
+(defn extract-type [context]
+  (-> context
+      :kindly/options
+      :type
+      (or :normal)))
+
 (defn cytoscape [{:as context
                   :keys [value]}]
   {:hiccup [:div
@@ -187,19 +193,52 @@
 };"))]]
    :deps [:cytoscape]})
 
-(defn echarts [{:as context
+(defn echarts [{:as   context
                 :keys [value]}]
   {:hiccup [:div
             {:style (extract-style context)}
-            [:script
-             (->> value
-                  charred/write-json-str
-                  (format
-                   "
+            (let [type (extract-type context)]
+              [:script
+               (format
+                "
 {
-  var myChart = echarts.init(document.currentScript.parentElement);
-  myChart.setOption(%s);
-};"))]]
+  let option = %s;
+  let type = %s;
+  const myChart = echarts.init(document.currentScript.parentElement);
+
+  if (type === 'bar-racing-chart') {
+    let seriesData = option?.series?.[0]?.data || [];
+    let yAxisData = option?.yAxis?.data || [];
+    let texts = option?.graphic?.elements?.[0]?.style?.text || []
+
+    let nextIndex;
+
+    const run = (currentIndex) => {
+      option.series[0].data = seriesData[currentIndex];
+      option.yAxis.data = yAxisData[currentIndex];
+      if (option.graphic?.elements?.[0]?.style) {
+        option.graphic.elements[0].style.text = texts[currentIndex];
+      }
+
+      nextIndex = (currentIndex === seriesData.length - 1) ? 0 : currentIndex + 1;
+
+      if (currentIndex === 0) {
+        myChart.clear();
+      }
+      myChart.setOption(option);
+    };
+
+    run(0);
+
+    setInterval(() => {
+      run(nextIndex);
+    }, option.animationDurationUpdate);
+  } else {
+    myChart.setOption(option);
+  }
+};"
+                (charred/write-json-str value)
+                (charred/write-json-str type))])]
    :deps [:echarts]})
 
 (defn plotly [{:as context
